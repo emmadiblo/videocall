@@ -356,22 +356,23 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/avstream@latest/dist/avstream.min.js"></script>
     <script>
         class VideoCallPlatform {
             constructor() {
                 this.localStream = null;
                 this.remoteStream = null;
-                this.peerConnection = null;
+                this.avstream = null;
                 this.socket = null;
                 this.roomId = null;
                 this.userName = null;
                 this.isAudioMuted = false;
                 this.isVideoMuted = false;
+                this.participants = new Map();
                 
                 this.initializeElements();
                 this.bindEvents();
-                this.setupPeerConnection();
+                this.initializeAVStream();
             }
 
             initializeElements() {
@@ -407,33 +408,61 @@
                 });
             }
 
-            setupPeerConnection() {
-                const configuration = {
+            initializeAVStream() {
+                // Configuration AVStream avec serveurs STUN/TURN
+                const config = {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
-                    ]
-                };
-
-                this.peerConnection = new RTCPeerConnection(configuration);
-
-                this.peerConnection.onicecandidate = (event) => {
-                    if (event.candidate && this.socket) {
-                        this.socket.emit('ice-candidate', {
-                            roomId: this.roomId,
-                            candidate: event.candidate
-                        });
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' }
+                    ],
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    },
+                    video: {
+                        width: { ideal: 1280, max: 1920 },
+                        height: { ideal: 720, max: 1080 },
+                        frameRate: { ideal: 30, max: 60 }
                     }
                 };
 
-                this.peerConnection.ontrack = (event) => {
-                    this.elements.remoteVideo.srcObject = event.streams[0];
-                    this.remoteStream = event.streams[0];
-                };
+                try {
+                    this.avstream = new AVStream(config);
+                    this.setupAVStreamEvents();
+                } catch (error) {
+                    console.error('Erreur initialisation AVStream:', error);
+                    this.updateStatus('Erreur d\'initialisation AVStream', 'error');
+                }
+            }
 
-                this.peerConnection.onconnectionstatechange = () => {
-                    this.updateStatus(`État de connexion: ${this.peerConnection.connectionState}`, 'info');
-                };
+            setupAVStreamEvents() {
+                if (!this.avstream) return;
+
+                // Événement de connexion d'un pair
+                this.avstream.on('peer-connected', (peerId, stream) => {
+                    console.log('Pair connecté:', peerId);
+                    this.handleRemoteStream(stream, peerId);
+                });
+
+                // Événement de déconnexion d'un pair
+                this.avstream.on('peer-disconnected', (peerId) => {
+                    console.log('Pair déconnecté:', peerId);
+                    this.handlePeerDisconnected(peerId);
+                });
+
+                // Événement d'erreur
+                this.avstream.on('error', (error) => {
+                    console.error('Erreur AVStream:', error);
+                    this.updateStatus(`Erreur de connexion: ${error.message}`, 'error');
+                });
+
+                // Événement de changement d'état
+                this.avstream.on('connection-state-change', (state) => {
+                    console.log('État de connexion:', state);
+                    this.updateStatus(`État: ${state}`, 'info');
+                });
             }
 
             async joinRoom() {
@@ -451,21 +480,30 @@
                 this.elements.joinBtn.innerHTML = '<span class="loading"></span> Connexion...';
 
                 try {
-                    // Obtenir le flux local
-                    this.localStream = await navigator.mediaDevices.getUserMedia({
-                        video: { width: 640, height: 480 },
-                        audio: true
+                    // Obtenir le flux local avec AVStream
+                    this.localStream = await this.avstream.getUserMedia({
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                            frameRate: { ideal: 30 }
+                        },
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
                     });
 
                     this.elements.localVideo.srcObject = this.localStream;
 
-                    // Ajouter les pistes au peer connection
-                    this.localStream.getTracks().forEach(track => {
-                        this.peerConnection.addTrack(track, this.localStream);
+                    // Initialiser la connexion WebSocket
+                    await this.initializeWebSocket();
+                    
+                    // Rejoindre la salle avec AVStream
+                    await this.avstream.joinRoom(roomId, {
+                        userId: userName,
+                        stream: this.localStream
                     });
-
-                    // Initialiser Socket.io (simulation)
-                    this.initializeSocket();
                     
                     // Afficher l'interface de l'appel
                     this.showCallInterface();
@@ -473,36 +511,99 @@
                     this.updateStatus(`Connecté à la salle: ${roomId}`, 'success');
 
                 } catch (error) {
-                    console.error('Erreur lors de l\'accès aux médias:', error);
-                    this.updateStatus('Erreur: Impossible d\'accéder à la caméra/microphone', 'error');
+                    console.error('Erreur lors de la connexion:', error);
+                    this.updateStatus(`Erreur: ${error.message}`, 'error');
                     this.elements.joinBtn.disabled = false;
                     this.elements.joinBtn.textContent = 'Rejoindre la salle';
                 }
             }
 
-            initializeSocket() {
-                // Simulation d'un socket pour la démo
-                // Dans un vrai projet, vous utiliseriez Socket.io avec un serveur
-                this.socket = {
-                    emit: (event, data) => {
-                        console.log('Socket emit:', event, data);
-                        // Simulation d'événements
-                        if (event === 'join-room') {
-                            setTimeout(() => {
-                                this.handleUserJoined({ userName: 'Utilisateur distant' });
-                            }, 2000);
-                        }
-                    },
-                    on: (event, callback) => {
-                        console.log('Socket listening for:', event);
-                    }
-                };
+            async initializeWebSocket() {
+                return new Promise((resolve, reject) => {
+                    try {
+                        // Connexion WebSocket au serveur de signalisation
+                        this.socket = new WebSocket('ws://localhost:8080/signaling');
 
-                // Rejoindre la salle
-                this.socket.emit('join-room', {
-                    roomId: this.roomId,
-                    userName: this.userName
+                        this.socket.onopen = () => {
+                            console.log('WebSocket connecté');
+                            this.socket.send(JSON.stringify({
+                                type: 'join-room',
+                                roomId: this.roomId,
+                                userName: this.userName
+                            }));
+                            resolve();
+                        };
+
+                        this.socket.onmessage = (event) => {
+                            this.handleWebSocketMessage(JSON.parse(event.data));
+                        };
+
+                        this.socket.onerror = (error) => {
+                            console.error('Erreur WebSocket:', error);
+                            reject(new Error('Impossible de se connecter au serveur'));
+                        };
+
+                        this.socket.onclose = () => {
+                            console.log('WebSocket fermé');
+                            this.updateStatus('Connexion au serveur fermée', 'error');
+                        };
+
+                    } catch (error) {
+                        reject(error);
+                    }
                 });
+            }
+
+            handleWebSocketMessage(data) {
+                switch (data.type) {
+                    case 'joined-room':
+                        this.updateParticipantList(data.participants);
+                        break;
+                    case 'user-joined':
+                        this.updateStatus(`${data.userName} a rejoint la salle`, 'success');
+                        this.participants.set(data.userName, { connected: true });
+                        this.updateParticipantList([...this.participants.keys()]);
+                        break;
+                    case 'user-left':
+                        this.updateStatus(`${data.userName} a quitté la salle`, 'info');
+                        this.participants.delete(data.userName);
+                        this.updateParticipantList([...this.participants.keys()]);
+                        break;
+                    case 'offer':
+                    case 'answer':
+                    case 'ice-candidate':
+                        // Transférer à AVStream pour le traitement WebRTC
+                        if (this.avstream) {
+                            this.avstream.handleSignalingMessage(data);
+                        }
+                        break;
+                    case 'error':
+                        this.updateStatus(data.message, 'error');
+                        break;
+                }
+            }
+
+            handleRemoteStream(stream, peerId) {
+                console.log('Flux distant reçu de:', peerId);
+                this.elements.remoteVideo.srcObject = stream;
+                this.remoteStream = stream;
+                
+                // Mettre à jour l'interface
+                const videoLabel = this.elements.remoteVideo.parentElement.querySelector('.video-label');
+                if (videoLabel) {
+                    videoLabel.textContent = peerId || 'Participant distant';
+                }
+            }
+
+            handlePeerDisconnected(peerId) {
+                console.log('Pair déconnecté:', peerId);
+                this.elements.remoteVideo.srcObject = null;
+                this.remoteStream = null;
+                
+                const videoLabel = this.elements.remoteVideo.parentElement.querySelector('.video-label');
+                if (videoLabel) {
+                    videoLabel.textContent = 'En attente...';
+                }
             }
 
             showCallInterface() {
@@ -515,51 +616,94 @@
             }
 
             toggleAudio() {
-                if (this.localStream) {
+                if (this.localStream && this.avstream) {
                     const audioTrack = this.localStream.getAudioTracks()[0];
                     if (audioTrack) {
                         audioTrack.enabled = !audioTrack.enabled;
                         this.isAudioMuted = !audioTrack.enabled;
                         
+                        // Notifier AVStream du changement
+                        this.avstream.muteAudio(this.isAudioMuted);
+                        
                         this.elements.muteBtn.classList.toggle('muted', this.isAudioMuted);
                         this.elements.muteBtn.textContent = this.isAudioMuted ? '🔇' : '🎤';
                         this.elements.muteBtn.title = this.isAudioMuted ? 'Activer le micro' : 'Couper le micro';
+                        
+                        // Notifier les autres participants
+                        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                            this.socket.send(JSON.stringify({
+                                type: 'audio-toggle',
+                                roomId: this.roomId,
+                                userName: this.userName,
+                                muted: this.isAudioMuted
+                            }));
+                        }
                     }
                 }
             }
 
             toggleVideo() {
-                if (this.localStream) {
+                if (this.localStream && this.avstream) {
                     const videoTrack = this.localStream.getVideoTracks()[0];
                     if (videoTrack) {
                         videoTrack.enabled = !videoTrack.enabled;
                         this.isVideoMuted = !videoTrack.enabled;
                         
+                        // Notifier AVStream du changement
+                        this.avstream.muteVideo(this.isVideoMuted);
+                        
                         this.elements.videoBtn.classList.toggle('disabled', this.isVideoMuted);
                         this.elements.videoBtn.textContent = this.isVideoMuted ? '📷' : '📹';
                         this.elements.videoBtn.title = this.isVideoMuted ? 'Activer la caméra' : 'Couper la caméra';
+                        
+                        // Notifier les autres participants
+                        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                            this.socket.send(JSON.stringify({
+                                type: 'video-toggle',
+                                roomId: this.roomId,
+                                userName: this.userName,
+                                muted: this.isVideoMuted
+                            }));
+                        }
                     }
                 }
             }
 
-            leaveRoom() {
-                if (this.localStream) {
-                    this.localStream.getTracks().forEach(track => track.stop());
-                }
+            async leaveRoom() {
+                try {
+                    // Arrêter le flux local
+                    if (this.localStream) {
+                        this.localStream.getTracks().forEach(track => track.stop());
+                        this.localStream = null;
+                    }
 
-                if (this.peerConnection) {
-                    this.peerConnection.close();
-                    this.setupPeerConnection();
-                }
+                    // Quitter la salle AVStream
+                    if (this.avstream) {
+                        await this.avstream.leaveRoom();
+                    }
 
-                if (this.socket) {
-                    this.socket.emit('leave-room', {
-                        roomId: this.roomId,
-                        userName: this.userName
-                    });
-                }
+                    // Fermer la connexion WebSocket
+                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                        this.socket.send(JSON.stringify({
+                            type: 'leave-room',
+                            roomId: this.roomId,
+                            userName: this.userName
+                        }));
+                        this.socket.close();
+                    }
 
-                // Réinitialiser l'interface
+                    // Réinitialiser l'interface
+                    this.resetInterface();
+                    
+                    this.updateStatus('Vous avez quitté la salle', 'info');
+
+                } catch (error) {
+                    console.error('Erreur lors de la déconnexion:', error);
+                    this.updateStatus('Erreur lors de la déconnexion', 'error');
+                }
+            }
+
+            resetInterface() {
                 this.elements.setupSection.style.display = 'block';
                 this.elements.videoContainer.classList.remove('active');
                 this.elements.callControls.classList.remove('active');
@@ -570,10 +714,17 @@
                 this.elements.localVideo.srcObject = null;
                 this.elements.remoteVideo.srcObject = null;
                 
-                this.updateStatus('Vous avez quitté la salle', 'info');
+                // Réinitialiser les boutons de contrôle
+                this.elements.muteBtn.classList.remove('muted');
+                this.elements.muteBtn.textContent = '🎤';
+                this.elements.videoBtn.classList.remove('disabled');
+                this.elements.videoBtn.textContent = '📹';
                 
                 this.roomId = null;
                 this.userName = null;
+                this.isAudioMuted = false;
+                this.isVideoMuted = false;
+                this.participants.clear();
             }
 
             handleUserJoined(data) {

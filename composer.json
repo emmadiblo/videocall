@@ -1,0 +1,22 @@
+{
+    "name": "videocall-platform/signaling-server",
+    "description": "Serveur de signalisation WebSocket pour plateforme de visioconférence",
+    "type": "project",
+    "require": {
+        "php": ">=7.4",
+        "ratchet/pawl": "^0.4",
+        "ratchet/rfc6455": "^0.3",
+        "ratchet/socket-io": "^0.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "VideoCall\\": "src/"
+        }
+    },
+    "scripts": {
+        "start-server": "php signaling_server.php"
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

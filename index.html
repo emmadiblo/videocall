@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VideoCall - Plateforme de Visioconférence</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            overflow: hidden;
+            max-width: 1200px;
+            width: 95%;
+            min-height: 600px;
+        }
+
+        .header {
+            background: linear-gradient(45deg, #2196F3, #21CBF3);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4CAF50;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .setup-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .room-controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-group label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .input-group input {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #2196F3, #21CBF3);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(33, 150, 243, 0.3);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #f44336, #ff6b6b);
+        }
+
+        .btn-danger:hover {
+            box-shadow: 0 10px 20px rgba(244, 67, 54, 0.3);
+        }
+
+        .video-container {
+            display: none;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 30px;
+            min-height: 400px;
+        }
+
+        .video-container.active {
+            display: grid;
+        }
+
+        .video-wrapper {
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .video-wrapper video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            min-height: 300px;
+        }
+
+        .video-label {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .call-controls {
+            display: none;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 12px;
+        }
+
+        .call-controls.active {
+            display: flex;
+        }
+
+        .control-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .control-btn.mute {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .control-btn.mute.muted {
+            background: #f44336;
+        }
+
+        .control-btn.video {
+            background: #2196F3;
+            color: white;
+        }
+
+        .control-btn.video.disabled {
+            background: #f44336;
+        }
+
+        .status-message {
+            text-align: center;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+
+        .status-message.info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #bbdefb;
+        }
+
+        .status-message.error {
+            background: #ffebee;
+            color: #d32f2f;
+            border: 1px solid #ffcdd2;
+        }
+
+        .status-message.success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+        }
+
+        .participants {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .participants h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .participant-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .participant {
+            background: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            font-size: 14px;
+            color: #333;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .video-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .room-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .input-group {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📹 VideoCall Platform</h1>
+            <p><span class="status-indicator"></span>Plateforme de visioconférence sécurisée</p>
+        </div>
+
+        <div class="main-content">
+            <div class="setup-section" id="setupSection">
+                <div class="room-controls">
+                    <div class="input-group">
+                        <label for="roomId">Nom de la salle:</label>
+                        <input type="text" id="roomId" placeholder="Entrez le nom de la salle" maxlength="20">
+                    </div>
+                    <div class="input-group">
+                        <label for="userName">Votre nom:</label>
+                        <input type="text" id="userName" placeholder="Votre nom" maxlength="20">
+                    </div>
+                    <button class="btn" id="joinBtn">Rejoindre la salle</button>
+                </div>
+            </div>
+
+            <div id="statusMessage" class="status-message" style="display: none;"></div>
+
+            <div class="video-container" id="videoContainer">
+                <div class="video-wrapper">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <div class="video-label">Vous</div>
+                </div>
+                <div class="video-wrapper">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <div class="video-label">Participant distant</div>
+                </div>
+            </div>
+
+            <div class="call-controls" id="callControls">
+                <button class="control-btn mute" id="muteBtn" title="Couper/Activer le micro">🎤</button>
+                <button class="control-btn video" id="videoBtn" title="Couper/Activer la caméra">📹</button>
+                <button class="btn btn-danger" id="leaveBtn">Quitter la salle</button>
+            </div>
+
+            <div class="participants" id="participantsSection" style="display: none;">
+                <h3>Participants connectés</h3>
+                <div class="participant-list" id="participantList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script>
+        class VideoCallPlatform {
+            constructor() {
+                this.localStream = null;
+                this.remoteStream = null;
+                this.peerConnection = null;
+                this.socket = null;
+                this.roomId = null;
+                this.userName = null;
+                this.isAudioMuted = false;
+                this.isVideoMuted = false;
+                
+                this.initializeElements();
+                this.bindEvents();
+                this.setupPeerConnection();
+            }
+
+            initializeElements() {
+                this.elements = {
+                    setupSection: document.getElementById('setupSection'),
+                    videoContainer: document.getElementById('videoContainer'),
+                    callControls: document.getElementById('callControls'),
+                    participantsSection: document.getElementById('participantsSection'),
+                    statusMessage: document.getElementById('statusMessage'),
+                    roomIdInput: document.getElementById('roomId'),
+                    userNameInput: document.getElementById('userName'),
+                    joinBtn: document.getElementById('joinBtn'),
+                    muteBtn: document.getElementById('muteBtn'),
+                    videoBtn: document.getElementById('videoBtn'),
+                    leaveBtn: document.getElementById('leaveBtn'),
+                    localVideo: document.getElementById('localVideo'),
+                    remoteVideo: document.getElementById('remoteVideo'),
+                    participantList: document.getElementById('participantList')
+                };
+            }
+
+            bindEvents() {
+                this.elements.joinBtn.addEventListener('click', () => this.joinRoom());
+                this.elements.muteBtn.addEventListener('click', () => this.toggleAudio());
+                this.elements.videoBtn.addEventListener('click', () => this.toggleVideo());
+                this.elements.leaveBtn.addEventListener('click', () => this.leaveRoom());
+                
+                // Permettre de rejoindre avec Enter
+                [this.elements.roomIdInput, this.elements.userNameInput].forEach(input => {
+                    input.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') this.joinRoom();
+                    });
+                });
+            }
+
+            setupPeerConnection() {
+                const configuration = {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                };
+
+                this.peerConnection = new RTCPeerConnection(configuration);
+
+                this.peerConnection.onicecandidate = (event) => {
+                    if (event.candidate && this.socket) {
+                        this.socket.emit('ice-candidate', {
+                            roomId: this.roomId,
+                            candidate: event.candidate
+                        });
+                    }
+                };
+
+                this.peerConnection.ontrack = (event) => {
+                    this.elements.remoteVideo.srcObject = event.streams[0];
+                    this.remoteStream = event.streams[0];
+                };
+
+                this.peerConnection.onconnectionstatechange = () => {
+                    this.updateStatus(`État de connexion: ${this.peerConnection.connectionState}`, 'info');
+                };
+            }
+
+            async joinRoom() {
+                const roomId = this.elements.roomIdInput.value.trim();
+                const userName = this.elements.userNameInput.value.trim();
+
+                if (!roomId || !userName) {
+                    this.updateStatus('Veuillez remplir tous les champs', 'error');
+                    return;
+                }
+
+                this.roomId = roomId;
+                this.userName = userName;
+                this.elements.joinBtn.disabled = true;
+                this.elements.joinBtn.innerHTML = '<span class="loading"></span> Connexion...';
+
+                try {
+                    // Obtenir le flux local
+                    this.localStream = await navigator.mediaDevices.getUserMedia({
+                        video: { width: 640, height: 480 },
+                        audio: true
+                    });
+
+                    this.elements.localVideo.srcObject = this.localStream;
+
+                    // Ajouter les pistes au peer connection
+                    this.localStream.getTracks().forEach(track => {
+                        this.peerConnection.addTrack(track, this.localStream);
+                    });
+
+                    // Initialiser Socket.io (simulation)
+                    this.initializeSocket();
+                    
+                    // Afficher l'interface de l'appel
+                    this.showCallInterface();
+                    
+                    this.updateStatus(`Connecté à la salle: ${roomId}`, 'success');
+
+                } catch (error) {
+                    console.error('Erreur lors de l\'accès aux médias:', error);
+                    this.updateStatus('Erreur: Impossible d\'accéder à la caméra/microphone', 'error');
+                    this.elements.joinBtn.disabled = false;
+                    this.elements.joinBtn.textContent = 'Rejoindre la salle';
+                }
+            }
+
+            initializeSocket() {
+                // Simulation d'un socket pour la démo
+                // Dans un vrai projet, vous utiliseriez Socket.io avec un serveur
+                this.socket = {
+                    emit: (event, data) => {
+                        console.log('Socket emit:', event, data);
+                        // Simulation d'événements
+                        if (event === 'join-room') {
+                            setTimeout(() => {
+                                this.handleUserJoined({ userName: 'Utilisateur distant' });
+                            }, 2000);
+                        }
+                    },
+                    on: (event, callback) => {
+                        console.log('Socket listening for:', event);
+                    }
+                };
+
+                // Rejoindre la salle
+                this.socket.emit('join-room', {
+                    roomId: this.roomId,
+                    userName: this.userName
+                });
+            }
+
+            showCallInterface() {
+                this.elements.setupSection.style.display = 'none';
+                this.elements.videoContainer.classList.add('active');
+                this.elements.callControls.classList.add('active');
+                this.elements.participantsSection.style.display = 'block';
+                
+                this.updateParticipantList([this.userName]);
+            }
+
+            toggleAudio() {
+                if (this.localStream) {
+                    const audioTrack = this.localStream.getAudioTracks()[0];
+                    if (audioTrack) {
+                        audioTrack.enabled = !audioTrack.enabled;
+                        this.isAudioMuted = !audioTrack.enabled;
+                        
+                        this.elements.muteBtn.classList.toggle('muted', this.isAudioMuted);
+                        this.elements.muteBtn.textContent = this.isAudioMuted ? '🔇' : '🎤';
+                        this.elements.muteBtn.title = this.isAudioMuted ? 'Activer le micro' : 'Couper le micro';
+                    }
+                }
+            }
+
+            toggleVideo() {
+                if (this.localStream) {
+                    const videoTrack = this.localStream.getVideoTracks()[0];
+                    if (videoTrack) {
+                        videoTrack.enabled = !videoTrack.enabled;
+                        this.isVideoMuted = !videoTrack.enabled;
+                        
+                        this.elements.videoBtn.classList.toggle('disabled', this.isVideoMuted);
+                        this.elements.videoBtn.textContent = this.isVideoMuted ? '📷' : '📹';
+                        this.elements.videoBtn.title = this.isVideoMuted ? 'Activer la caméra' : 'Couper la caméra';
+                    }
+                }
+            }
+
+            leaveRoom() {
+                if (this.localStream) {
+                    this.localStream.getTracks().forEach(track => track.stop());
+                }
+
+                if (this.peerConnection) {
+                    this.peerConnection.close();
+                    this.setupPeerConnection();
+                }
+
+                if (this.socket) {
+                    this.socket.emit('leave-room', {
+                        roomId: this.roomId,
+                        userName: this.userName
+                    });
+                }
+
+                // Réinitialiser l'interface
+                this.elements.setupSection.style.display = 'block';
+                this.elements.videoContainer.classList.remove('active');
+                this.elements.callControls.classList.remove('active');
+                this.elements.participantsSection.style.display = 'none';
+                this.elements.joinBtn.disabled = false;
+                this.elements.joinBtn.textContent = 'Rejoindre la salle';
+                
+                this.elements.localVideo.srcObject = null;
+                this.elements.remoteVideo.srcObject = null;
+                
+                this.updateStatus('Vous avez quitté la salle', 'info');
+                
+                this.roomId = null;
+                this.userName = null;
+            }
+
+            handleUserJoined(data) {
+                this.updateStatus(`${data.userName} a rejoint la salle`, 'success');
+                this.updateParticipantList([this.userName, data.userName]);
+            }
+
+            updateParticipantList(participants) {
+                this.elements.participantList.innerHTML = '';
+                participants.forEach(participant => {
+                    const div = document.createElement('div');
+                    div.className = 'participant';
+                    div.textContent = participant;
+                    this.elements.participantList.appendChild(div);
+                });
+            }
+
+            updateStatus(message, type = 'info') {
+                this.elements.statusMessage.textContent = message;
+                this.elements.statusMessage.className = `status-message ${type}`;
+                this.elements.statusMessage.style.display = 'block';
+                
+                setTimeout(() => {
+                    this.elements.statusMessage.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Initialiser l'application
+        document.addEventListener('DOMContentLoaded', () => {
+            new VideoCallPlatform();
+        });
+    </script>
+</body>
+</html>

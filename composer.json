@@ -6,7 +6,7 @@
         "php": ">=7.4",
         "ratchet/pawl": "^0.4",
         "ratchet/rfc6455": "^0.3",
-        "ratchet/socket-io": "^0.3"
+        "cboden/ratchet": "^0.4.4"
     },
     "autoload": {
         "psr-4": {
